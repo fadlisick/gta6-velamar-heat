@@ -1,5 +1,6 @@
-// Sound, all synthesized with WebAudio — no audio files, no network. Engine
-// hum, sirens, gunshots, UI pings, and three procedural radio stations.
+// Sound, all synthesized with WebAudio — no audio files, no network.
+// Engine hum, sirens, gunshots, UI pings, cash and race stingers, and three
+// procedural radio stations that play themselves.
 export class AudioSys {
   constructor() {
     this.ctx = null;
@@ -41,8 +42,10 @@ export class AudioSys {
     if (this.master) this.master.gain.value = this.muted ? 0 : 0.5;
     return this.muted;
   }
+
   stationName() { return this.stations[this.station].name; }
   trackName() { return this.stations[this.station].tracks[this.trackIndex]; }
+
   nextStation() {
     this.station = (this.station + 1) % this.stations.length;
     this.trackIndex = 0;
@@ -53,12 +56,16 @@ export class AudioSys {
     if (!this.ctx || this.muted) return;
     const o = this.ctx.createOscillator();
     const g = this.ctx.createGain();
-    o.type = type; o.frequency.value = freq;
+    o.type = type;
+    o.frequency.value = freq;
     g.gain.setValueAtTime(vol, this.ctx.currentTime);
     g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + dur);
-    o.connect(g); g.connect(this.master);
-    o.start(); o.stop(this.ctx.currentTime + dur);
+    o.connect(g);
+    g.connect(this.master);
+    o.start();
+    o.stop(this.ctx.currentTime + dur);
   }
+
   click() { this.blip(880, 0.07, 'square', 0.08); }
   missionPing() { this.blip(660, 0.12, 'sine', 0.16); setTimeout(() => this.blip(990, 0.18, 'sine', 0.16), 130); }
   stepDone() { this.blip(523, 0.1, 'sine', 0.16); setTimeout(() => this.blip(784, 0.22, 'sine', 0.16), 110); }
@@ -66,6 +73,14 @@ export class AudioSys {
     [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => this.blip(f, 0.25, 'triangle', 0.2), i * 130));
   }
   reload() { this.blip(300, 0.08, 'square', 0.1); setTimeout(() => this.blip(420, 0.08, 'square', 0.1), 350); }
+  cash() { this.blip(1318, 0.1, 'triangle', 0.18); setTimeout(() => this.blip(1760, 0.16, 'triangle', 0.18), 90); }
+  buy() { this.blip(392, 0.1, 'triangle', 0.18); setTimeout(() => this.blip(523, 0.12, 'triangle', 0.18), 90); setTimeout(() => this.blip(659, 0.2, 'triangle', 0.18), 180); }
+  denied() { this.blip(180, 0.18, 'square', 0.12); }
+  pickup() { this.blip(988, 0.09, 'sine', 0.16); setTimeout(() => this.blip(1319, 0.14, 'sine', 0.16), 80); }
+  countdown(final = false) { this.blip(final ? 1046 : 659, final ? 0.4 : 0.14, 'square', 0.18); }
+  raceWin() {
+    [659, 784, 988, 1319].forEach((f, i) => setTimeout(() => this.blip(f, 0.22, 'triangle', 0.2), i * 120));
+  }
 
   noiseBurst(dur, vol, lowpass = 1200) {
     if (!this.ctx || this.muted) return;
@@ -76,13 +91,18 @@ export class AudioSys {
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
     const filt = this.ctx.createBiquadFilter();
-    filt.type = 'lowpass'; filt.frequency.value = lowpass;
+    filt.type = 'lowpass';
+    filt.frequency.value = lowpass;
     const g = this.ctx.createGain();
     g.gain.value = vol;
-    src.connect(filt); filt.connect(g); g.connect(this.master);
+    src.connect(filt);
+    filt.connect(g);
+    g.connect(this.master);
     src.start();
   }
+
   gunshot() { this.noiseBurst(0.14, 0.5, 2400); this.blip(120, 0.1, 'square', 0.25); }
+  shotgunBlast() { this.noiseBurst(0.22, 0.6, 1600); this.blip(90, 0.14, 'square', 0.3); }
   distantShot() { this.noiseBurst(0.1, 0.1, 900); }
   enemyShot() { this.noiseBurst(0.08, 0.12, 1100); }
   crash() { this.noiseBurst(0.3, 0.4, 500); }
@@ -95,8 +115,11 @@ export class AudioSys {
     this.engineGain = this.ctx.createGain();
     this.engineGain.gain.value = 0;
     const filt = this.ctx.createBiquadFilter();
-    filt.type = 'lowpass'; filt.frequency.value = 420;
-    this.engineOsc.connect(filt); filt.connect(this.engineGain); this.engineGain.connect(this.master);
+    filt.type = 'lowpass';
+    filt.frequency.value = 420;
+    this.engineOsc.connect(filt);
+    filt.connect(this.engineGain);
+    this.engineGain.connect(this.master);
     this.engineOsc.start();
     // Siren: two-tone, only audible while wanted.
     this.sirenOsc = this.ctx.createOscillator();
@@ -104,7 +127,8 @@ export class AudioSys {
     this.sirenOsc.frequency.value = 700;
     this.sirenGain = this.ctx.createGain();
     this.sirenGain.gain.value = 0;
-    this.sirenOsc.connect(this.sirenGain); this.sirenGain.connect(this.master);
+    this.sirenOsc.connect(this.sirenGain);
+    this.sirenGain.connect(this.master);
     this.sirenOsc.start();
   }
 
@@ -121,8 +145,8 @@ export class AudioSys {
     void dt;
   }
 
-  // Procedural radio: a slow chord pad + a bass line, switching track names
-  // every 40 seconds. Deliberately mellow — it is a sunset, after all.
+  // Procedural radio: a slow chord pad plus a bass line, switching track
+  // names every 40 seconds. Deliberately mellow — it is a sunset, after all.
   startRadio() {
     if (!this.ctx || this.noteTimer) return;
     const chords = [
@@ -135,22 +159,28 @@ export class AudioSys {
       ci += 1;
       for (const f of chord) {
         const o = this.ctx.createOscillator();
-        o.type = 'triangle'; o.frequency.value = f;
+        o.type = 'triangle';
+        o.frequency.value = f;
         const g = this.ctx.createGain();
         g.gain.setValueAtTime(0.0001, this.ctx.currentTime);
         g.gain.linearRampToValueAtTime(0.045, this.ctx.currentTime + 0.6);
         g.gain.linearRampToValueAtTime(0.0001, this.ctx.currentTime + 3.4);
-        o.connect(g); g.connect(this.master);
-        o.start(); o.stop(this.ctx.currentTime + 3.6);
+        o.connect(g);
+        g.connect(this.master);
+        o.start();
+        o.stop(this.ctx.currentTime + 3.6);
       }
       // Bass note on the root.
       const b = this.ctx.createOscillator();
-      b.type = 'sine'; b.frequency.value = chord[0] / 2;
+      b.type = 'sine';
+      b.frequency.value = chord[0] / 2;
       const bg = this.ctx.createGain();
       bg.gain.setValueAtTime(0.07, this.ctx.currentTime);
       bg.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 3.2);
-      b.connect(bg); bg.connect(this.master);
-      b.start(); b.stop(this.ctx.currentTime + 3.4);
+      b.connect(bg);
+      bg.connect(this.master);
+      b.start();
+      b.stop(this.ctx.currentTime + 3.4);
     };
     playChord();
     this.noteTimer = setInterval(() => {

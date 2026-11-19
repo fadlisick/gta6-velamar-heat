@@ -1,7 +1,7 @@
 // The wanted system: 0–5 stars, Velamar Bay Police patrol cars that chase
-// and ram, foot cops, roadblocks at 4 stars, and a police helicopter with a
-// spotlight at 3+. Heat decays when the player is unseen and quiet; getting
-// caught on foot means BUSTED, dying means WASTED.
+// and ram, foot cops who arrest, and a police helicopter with a spotlight
+// at 3 stars and up. Heat decays when the player is unseen and quiet;
+// getting caught on foot means BUSTED, dying means WASTED.
 import * as THREE from 'three';
 import { CFG } from './config.js';
 import { Car } from './vehicles.js';
@@ -28,6 +28,7 @@ export class Police {
   addHeat(amount) {
     this.heat = clamp(this.heat + amount, 0, CFG.wantedMax);
   }
+
   clearHeat() {
     this.heat = 0;
     this.despawnAll();
@@ -35,7 +36,7 @@ export class Police {
 
   desiredCars() {
     const s = this.stars;
-    return s === 0 ? 0 : s === 1 ? 1 : s === 2 ? 2 : s === 3 ? 3 : s === 4 ? 4 : 5;
+    return s === 0 ? 0 : s;
   }
 
   spawnCar(px, pz) {
@@ -63,7 +64,8 @@ export class Police {
     cap.position.y = 1.96;
     const legL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.74, 0.22), navy);
     legL.position.set(-0.15, 0.37, 0);
-    const legR = legL.clone(); legR.position.x = 0.15;
+    const legR = legL.clone();
+    legR.position.x = 0.15;
     g.add(torso, head, cap, legL, legR);
     const angle = range(this.rng, 0, Math.PI * 2);
     g.position.set(px + Math.sin(angle) * 14, 0, pz + Math.cos(angle) * 14);
@@ -76,8 +78,9 @@ export class Police {
   spawnHeli() {
     if (this.heli) return;
     const g = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.BoxGeometry(4.2, 1.4, 1.8), new THREE.MeshLambertMaterial({ color: 0x1a2a6e }));
-    const tail = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.5, 0.5), new THREE.MeshLambertMaterial({ color: 0x1a2a6e }));
+    const navy = new THREE.MeshLambertMaterial({ color: 0x1a2a6e });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(4.2, 1.4, 1.8), navy);
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.5, 0.5), navy);
     tail.position.set(-3.4, 0.3, 0);
     const rotor = new THREE.Mesh(new THREE.BoxGeometry(7.5, 0.08, 0.5), new THREE.MeshLambertMaterial({ color: 0x222226 }));
     rotor.position.y = 1;
@@ -108,7 +111,8 @@ export class Police {
   }
 
   update(dt, G, now) {
-    const px = G.player.x, pz = G.player.z;
+    const px = G.player.x;
+    const pz = G.player.z;
     // Heat decays when the player is quiet and no police car is close.
     const nearest = this.cars.reduce((m, c) => Math.min(m, (c.x - px) ** 2 + (c.z - pz) ** 2), Infinity);
     const seen = nearest < 45 * 45 || this.stars >= 3;
@@ -117,24 +121,25 @@ export class Police {
       this.heat = Math.max(0, this.heat - CFG.heatDecayPerSec * dt * 3);
       if (this.stars === 0) this.despawnAll();
     }
-    // Spawn / trim patrol cars to the wanted level.
+    // Spawn or trim patrol cars to match the wanted level.
     this.spawnTimer -= dt;
     if (this.cars.length < this.desiredCars() && this.spawnTimer <= 0) {
       this.spawnCar(px, pz);
       this.spawnTimer = 1.2;
     }
-    if (this.cars.length > this.desiredCars()) {
+    while (this.cars.length > this.desiredCars()) {
       const c = this.cars.pop();
       c.dispose();
     }
-    // Foot cops join at 2+ stars when the player is on foot.
+    // Foot cops join at 2+ stars while the player is on foot.
     if (this.stars >= 2 && !G.driving.active && this.cops.length < this.stars - 1 && this.spawnTimer <= 0) {
       this.spawnCop(px, pz);
       this.spawnTimer = 2;
     }
     // Pursuit: steer toward the player, ram when close.
     for (const car of this.cars) {
-      const dx = px - car.x, dz = pz - car.z;
+      const dx = px - car.x;
+      const dz = pz - car.z;
       const dist = Math.hypot(dx, dz) || 1;
       const wantHeading = Math.atan2(dx, dz);
       car.heading = angleLerp(car.heading, wantHeading, Math.min(1, dt * 1.8));
@@ -149,33 +154,33 @@ export class Police {
         nz = car.z - Math.cos(car.heading) * 4 * dt;
         car.speed *= 0.85;
       }
-      car.pos.x = nx; car.pos.z = nz;
+      car.pos.x = nx;
+      car.pos.z = nz;
       car.mesh.rotation.y = car.heading;
-      // Flash the light bar.
+      // Flash the light bar red/blue.
       const bar = car.mesh.userData.lightBar;
       if (bar) bar.material.color.setHex(Math.sin(now * 9) > 0 ? 0xff2a2a : 0x2a6eff);
       // Ram the player's car.
       if (G.driving.active && dist < 5.2) {
         G.driving.car.speed *= 0.82;
-        G.player.damage(0); // contact alone does not wound; the crash does
         if (Math.abs(G.driving.car.speed) > 12) G.effects?.crashSparks(car.x, car.z);
       }
     }
     // Foot cops chase on foot and arrest at close range.
     for (const cop of this.cops) {
-      const dx = px - cop.x, dz = pz - cop.z;
+      const dx = px - cop.x;
+      const dz = pz - cop.z;
       const dist = Math.hypot(dx, dz) || 1;
       cop.x += (dx / dist) * cop.speed * dt;
       cop.z += (dz / dist) * cop.speed * dt;
       cop.phase += dt * 8;
-      cop.mesh.position.set(cop.x, 0, cop.z);
+      cop.mesh.position.set(cop.x, Math.abs(Math.sin(cop.phase)) * 0.06, cop.z);
       cop.mesh.rotation.y = Math.atan2(dx, dz);
-      cop.mesh.position.y = Math.abs(Math.sin(cop.phase)) * 0.06;
       if (dist < CFG.bustDistance && !G.driving.active && G.player.speed < 3) {
         G.busted = true;
       }
     }
-    // Helicopter.
+    // Helicopter above the player from 3 stars.
     if (this.stars >= CFG.heliAtStars) {
       this.spawnHeli();
       const h = this.heli;

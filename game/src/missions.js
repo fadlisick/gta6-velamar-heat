@@ -1,6 +1,7 @@
 // The story: eight jobs to clear Dario's debt to Mama Luz and take Velamar
-// Bay from Los Tiburones. Each mission is a chain of steps — drive, steal,
-// chase, shoot, deliver, escape — with a beacon, dialogue, and a payout.
+// Bay back from Los Tiburones. Each mission is a chain of steps — drive,
+// steal, chase, shoot, deliver, escape — with a beacon, dialogue and a
+// payout. The ledger (Tab) lists them; finishing all eight ends the debt.
 import { CFG } from './config.js';
 
 export const MISSIONS = [
@@ -90,12 +91,13 @@ export class MissionManager {
     this.current = null; // mission object
     this.stepIndex = 0;
     this.stepState = null;
-    this.beacon = null; // THREE.Mesh set by main
+    this.beacon = null; // THREE.Mesh, set by main
     this.killsLeft = 0;
   }
 
   get active() { return this.current !== null; }
   get step() { return this.current ? this.current.steps[this.stepIndex] : null; }
+
   get nextMission() {
     const done = this.G.missionsDone;
     return MISSIONS.find((m) => !done.includes(m.id)) || null;
@@ -126,10 +128,8 @@ export class MissionManager {
     if (s.type === 'escape') {
       this.G.police.addHeat(4 - this.G.police.heat);
     }
-    if (s.type === 'steal') {
-      // A stealable car waits at the marker: the traffic system keeps parked
-      // cars along every curb, and the marker guides the player to one.
-    }
+    // A steal step needs a car at the marker; the traffic system keeps
+    // parked cars along every curb, and the marker guides the player to one.
     this.G.hud?.setMission(this.current.name, this.stepText());
     this.G.audio?.missionPing();
   }
@@ -146,13 +146,14 @@ export class MissionManager {
     return s ? { x: s.x, z: s.z } : null;
   }
 
-  // Called every frame; returns true when a step completes.
+  // Called every frame; returns nothing, completes steps as they land.
   update(dt) {
     if (!this.current) return;
     const G = this.G;
     const s = this.step;
     if (!s) return;
-    const px = G.player.x, pz = G.player.z;
+    const px = G.player.x;
+    const pz = G.player.z;
     const inCar = G.driving.active;
     const carPos = inCar ? { x: G.driving.car.x, z: G.driving.car.z } : { x: px, z: pz };
     const d = Math.hypot(carPos.x - s.x, carPos.z - s.z);
@@ -166,7 +167,7 @@ export class MissionManager {
       G.hud?.setMission(this.current.name, this.stepText());
       if (this.killsLeft <= 0) this.completeStep();
     }
-    // Beacon + HUD distance.
+    // Beacon bobs over the objective; HUD shows the distance.
     if (this.beacon) {
       this.beacon.position.set(s.x, 3 + Math.sin(G.time * 2) * 0.5, s.z);
       this.beacon.rotation.y += dt * 1.5;
@@ -178,9 +179,8 @@ export class MissionManager {
     const G = this.G;
     this.stepIndex += 1;
     G.audio?.stepDone();
-    if (this.stepIndex >= this.current.steps.length) {
-      this.finishMission();
-    } else {
+    if (this.stepIndex >= this.current.steps.length) this.finishMission();
+    else {
       this.enterStep();
       G.toast('OBJECTIVE UPDATED');
     }

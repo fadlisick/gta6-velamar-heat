@@ -3,7 +3,7 @@
 // hang around the plaza and the beach.
 import * as THREE from 'three';
 import { CFG, PALETTE, roadCenters } from './config.js';
-import { makeRng, pick, range, clamp } from './random.js';
+import { makeRng, pick, range } from './random.js';
 
 function makePedMesh(rng) {
   const g = new THREE.Group();
@@ -64,10 +64,11 @@ export class Pedestrians {
     p.panic = 0;
   }
 
-  // Gunfire / a crash nearby makes peds scream and run.
+  // Gunfire or a crash nearby makes peds scream and run.
   scare(x, z, radius = 22) {
     for (const p of this.peds) {
-      const dx = p.x - x, dz = p.z - z;
+      const dx = p.x - x;
+      const dz = p.z - z;
       if (dx * dx + dz * dz < radius * radius) {
         p.panic = range(this.rng, 2.5, 5);
         p.fleeing = true;
@@ -84,7 +85,8 @@ export class Pedestrians {
         p.panic -= dt;
         speed = 4.2;
         // Run away from the danger point.
-        const dx = p.x - danger.x, dz = p.z - danger.z;
+        const dx = p.x - danger.x;
+        const dz = p.z - danger.z;
         const len = Math.hypot(dx, dz) || 1;
         p.x += (dx / len) * speed * dt;
         p.z += (dz / len) * speed * dt;
@@ -113,12 +115,14 @@ export class Pedestrians {
       p.walkPhase += dt * speed * 3.4;
       const s = Math.sin(p.walkPhase) * 0.5;
       const u = p.mesh.userData;
-      u.legL.rotation.x = s; u.legR.rotation.x = -s;
-      u.armL.rotation.x = -s * 0.7; u.armR.rotation.x = s * 0.7;
+      u.legL.rotation.x = s;
+      u.legR.rotation.x = -s;
+      u.armL.rotation.x = -s * 0.7;
+      u.armR.rotation.x = s * 0.7;
       p.mesh.position.set(p.x, 0, p.z);
       p.mesh.rotation.y = p.heading;
-      void playerX; void playerZ;
-      void clamp;
+      void playerX;
+      void playerZ;
     }
   }
 }

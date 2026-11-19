@@ -20,6 +20,7 @@
   #cashbox{text-align:right;text-shadow:0 2px 6px rgba(0,0,0,.8)}
   #cash{font-size:26px;font-weight:800;color:#7dff9a}
   #respect{font-size:13px;color:#ffd94d;font-weight:700}
+  #collect{font-size:13px;color:#ffd94d;font-weight:700}
   #clock{font-size:13px;color:#fff;opacity:.85}
   #healthbar{position:absolute;top:64px;left:14px;width:210px}
   #healthbar .label{font-size:11px;letter-spacing:2px;opacity:.85;text-shadow:0 1px 4px #000}
@@ -32,6 +33,10 @@
   #objective .mname{font-size:12px;color:#ffd94d;font-weight:800;letter-spacing:2px;text-transform:uppercase}
   #objective .mtext{font-size:15px;font-weight:600;margin-top:2px}
   #objective .mdist{font-size:12px;opacity:.85}
+  #racebox{position:absolute;top:96px;left:50%;transform:translateX(-50%);text-align:center;
+    background:rgba(10,8,24,.8);border:1px solid #ff7a2b;border-radius:10px;padding:6px 18px}
+  #racename{font-size:12px;color:#ff7a2b;font-weight:800;letter-spacing:2px}
+  #racetime{font-size:20px;font-weight:800}
   #minimapWrap{position:absolute;right:14px;bottom:14px;width:218px;height:218px;border-radius:50%;
     overflow:hidden;border:3px solid rgba(255,255,255,.75);box-shadow:0 0 0 3px rgba(0,0,0,.45),0 6px 24px rgba(0,0,0,.6);
     background:#0d2b45}
@@ -40,6 +45,8 @@
   #speed{font-size:34px;font-weight:800}
   #speed small{font-size:13px;opacity:.8}
   #gear{font-size:13px;color:#ffd94d;font-weight:700}
+  #nitrobar{width:120px;height:8px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.4);border-radius:4px;margin-top:5px;margin-left:auto}
+  #nitrobar>div{height:100%;width:100%;background:#6ec6ff;border-radius:3px}
   #weapon{position:absolute;right:14px;bottom:246px;text-align:right;text-shadow:0 2px 6px #000}
   #weapon .wname{font-size:17px;font-weight:800}
   #weapon .wammo{font-size:13px;opacity:.9}
@@ -57,6 +64,30 @@
   #dialogue{position:absolute;left:50%;bottom:150px;transform:translateX(-50%);width:min(640px,86vw);
     background:rgba(10,8,24,.82);border-left:4px solid #ffd94d;border-radius:8px;padding:10px 16px;font-size:15px;line-height:1.45}
   #dialogue .who{color:#ffd94d;font-weight:800;font-size:12px;letter-spacing:2px;text-transform:uppercase}
+  /* ---------- weapon wheel ---------- */
+  #wheel{position:absolute;left:50%;top:50%;width:340px;height:340px;transform:translate(-50%,-50%);
+    z-index:7;pointer-events:none}
+  .wslice{position:absolute;width:96px;height:64px;margin:-32px 0 0 -48px;text-align:center;
+    background:rgba(10,8,24,.78);border:2px solid rgba(255,255,255,.35);border-radius:10px;
+    display:flex;flex-direction:column;justify-content:center}
+  .wslice b{font-size:14px;letter-spacing:1px}
+  .wslice span{font-size:11px;opacity:.85}
+  .wslice.sel{border-color:#ffd94d;background:rgba(60,40,10,.88);box-shadow:0 0 18px rgba(255,217,77,.6)}
+  .wslice.locked{opacity:.55}
+  .wcenter{position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px 0 0 -26px;
+    border-radius:50%;background:rgba(255,217,77,.9);color:#1a0f2e;font-weight:900;font-size:22px;
+    display:flex;align-items:center;justify-content:center}
+  /* ---------- shop / garage menus ---------- */
+  .shopmenu{position:absolute;inset:0;z-index:11;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(10,4,20,.82);text-align:center}
+  .shopmenu h1{font-size:36px;margin:0;letter-spacing:4px;color:#ffd94d}
+  .shopmenu p{max-width:640px;font-size:15px;line-height:1.5;color:#e8e2ff}
+  .shopgrid{display:grid;grid-template-columns:repeat(2,minmax(240px,300px));gap:10px;margin:12px 0;text-align:left}
+  .shopgrid>div{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.25);border-radius:10px;padding:12px 14px;font-size:14px;line-height:1.5}
+  .shopbtn{pointer-events:auto;cursor:pointer;font-size:14px;font-weight:700;color:#1a0f2e;
+    background:linear-gradient(180deg,#ffe27a,#ffb84d);border:none;border-radius:8px;padding:8px 14px;margin-top:6px}
+  .shopbtn:disabled{opacity:.4;cursor:default}
+  .maxed{color:#7dff9a;font-weight:800}
   /* ---------- menus ---------- */
   .menu{position:absolute;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;
     background:linear-gradient(180deg,rgba(26,10,46,.25) 0%,rgba(26,10,46,.55) 55%,rgba(10,4,20,.88) 100%);text-align:center}
@@ -98,10 +129,11 @@
         </div>
       </div>
       <div id="objective" class="hidden"><div class="mname" id="mname"></div><div class="mtext" id="mtext"></div><div class="mdist" id="mdist"></div></div>
-      <div id="cashbox"><div id="cash">$0</div><div id="respect">RESPECT 0</div><div id="clock">18:42 · VELAMAR BAY</div></div>
+      <div id="racebox" class="hidden"><div id="racename"></div><div id="racetime"></div></div>
+      <div id="cashbox"><div id="cash">$0</div><div id="respect">RESPECT 0</div><div id="collect">◉ 0/12</div><div id="clock">18:42 · VELAMAR BAY</div></div>
     </div>
     <div id="minimapWrap"><canvas id="minimap" width="218" height="218"></canvas></div>
-    <div id="speedo" class="hidden"><div id="speed">0 <small>km/h</small></div><div id="gear">PARK</div></div>
+    <div id="speedo" class="hidden"><div id="speed">0 <small>km/h</small></div><div id="gear">PARK</div><div id="nitrobar" style="display:none"><div></div></div></div>
     <div id="weapon"><div class="wname" id="wname">FISTS</div><div class="wammo" id="wammo"></div></div>
     <div id="radio">♪ <b id="station">RADIO VELA 88.4</b> <span id="track">— Sunset Drive</span></div>
     <div id="hint" class="hidden"></div>
@@ -109,16 +141,20 @@
     <div id="toast"></div>
     <div id="dialogue" class="hidden"><div class="who" id="dwho"></div><div id="dtext"></div></div>
   </div>
+  <div id="wheel" class="hidden"></div>
+
+  <div id="garageMenu" class="shopmenu hidden"></div>
+  <div id="shopMenu" class="shopmenu hidden"></div>
 
   <div id="startmenu" class="menu">
     <h1>VELAMAR HEAT</h1><h2>Sunset Run · Velamar Bay</h2>
     <p>Eight jobs. One debt. A whole bay to take back. Explore Velamar Bay on foot and by car,
-    steal anything with wheels, outrun the Velamar Bay Police, and finish Dario's story —
+    steal anything with wheels, tune it in the Calle Sol garage, outrun the Velamar Bay Police, and finish Dario's story —
     from a nobody with a borrowed pistol to the name every crew in the bay respects.</p>
     <div class="keys">
-      <b>W A S D</b> move / drive &nbsp; <b>Mouse</b> look &nbsp; <b>Shift</b> sprint &nbsp; <b>Space</b> jump / handbrake<br>
-      <b>E</b> enter / steal car &nbsp; <b>Click</b> shoot / punch &nbsp; <b>1–3</b> weapons &nbsp; <b>R</b> reload<br>
-      <b>C</b> camera &nbsp; <b>M</b> radio &nbsp; <b>P</b> pause &nbsp; <b>F</b> pay respect (hide) &nbsp; <b>H</b> horn
+      <b>W A S D</b> move / drive &nbsp; <b>Mouse</b> look &nbsp; <b>Shift</b> sprint / nitro in car &nbsp; <b>Space</b> jump / handbrake<br>
+      <b>E</b> enter car · garage · shop · race &nbsp; <b>Click</b> shoot / punch &nbsp; <b>Q</b> weapon wheel &nbsp; <b>1–5</b> weapons &nbsp; <b>R</b> reload<br>
+      <b>C</b> camera &nbsp; <b>M</b> radio &nbsp; <b>P</b> pause &nbsp; <b>F</b> save &nbsp; <b>H</b> horn &nbsp; <b>Tab</b> mission ledger
     </div>
     <button class="btn" id="btnStart">START ENGINE</button>
     <button class="btn ghost" id="btnContinue">CONTINUE — <span id="contLabel">NO SAVE YET</span></button>

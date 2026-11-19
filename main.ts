@@ -7,9 +7,11 @@
 // with the vendored make.fun library. The game: an open-world crime game in
 // Velamar Bay — a city on foot and by car, traffic and pedestrians, cars to
 // steal, a 5-star wanted level with police cars, foot cops and a helicopter,
-// 8 story missions, combat, a HUD with a live minimap, a start screen and a
-// localStorage save. Put 3 or 4 PNG or JPEG screenshots in screenshots/ (the
-// first by name is the cover) and run it.
+// 8 story missions, combat with a weapon wheel (fists, pistol, SMG, shotgun,
+// rifle), a garage to store and tune cars (engine, armor, tires, nitro),
+// street races, hidden sunset tokens, a safehouse and a gun shop, a HUD with
+// a live minimap, a start screen and a localStorage save. Put 3 or 4 PNG or
+// JPEG screenshots in screenshots/ (the first by name is the cover) and run it.
 //
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:

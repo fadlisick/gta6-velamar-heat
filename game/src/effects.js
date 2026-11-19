@@ -1,5 +1,6 @@
-// Juice: particle bursts for blood, crash sparks and explosions, plus a
-// floating damage marker. All particles are pooled boxes with a short life.
+// Juice: particle bursts for blood, crash sparks, explosions and nitro
+// flames. All particles are pooled boxes with a short life, so the frame
+// never allocates mid-burst.
 import * as THREE from 'three';
 import { makeRng, range } from './random.js';
 
@@ -33,8 +34,16 @@ export class Effects {
       });
     }
   }
+
   blood(x, z) { this.burst(x, 1.2, z, 0xc01818, 10, 2.5, 0.7); }
   crashSparks(x, z) { this.burst(x, 1.0, z, 0xffd94d, 12, 4, 0.5, 3); }
+  nitroFlame(x, z, heading) {
+    // A short orange jet behind the car, called every frame while boosting.
+    const bx = x - Math.sin(heading) * 2.4;
+    const bz = z - Math.cos(heading) * 2.4;
+    this.burst(bx, 0.8, bz, 0xff7a2b, 2, 1.2, 0.3, 1);
+  }
+  pickup(x, z) { this.burst(x, 1.2, z, 0xffd94d, 14, 3, 0.8, 4); }
   explosion(x, z) {
     this.burst(x, 1.2, z, 0xff7a2b, 26, 7, 0.9, 6);
     this.burst(x, 1.2, z, 0x3a3a3a, 14, 3, 1.4, 5);

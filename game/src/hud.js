@@ -1,6 +1,7 @@
 // HUD: DOM readouts (health, cash, wanted stars, weapon, speed, radio) and
 // a canvas minimap — the whole city from above with the player arrow, the
-// mission marker, police blips, traffic dots and the beach.
+// mission marker, police blips, traffic dots, the beach, and the new
+// activity markers: garage, gun shop, safehouse, race starts, tokens.
 import { CFG } from './config.js';
 
 export class Hud {
@@ -8,8 +9,9 @@ export class Hud {
     this.G = G;
     this.el = {};
     for (const id of ['hud', 'stars', 'cash', 'respect', 'clock', 'healthbarFill', 'armorbarFill',
-      'objective', 'mname', 'mtext', 'mdist', 'minimap', 'speedo', 'speed', 'gear',
-      'wname', 'wammo', 'station', 'track', 'hint', 'crosshair', 'toast', 'dialogue', 'dwho', 'dtext', 'damage']) {
+      'objective', 'mname', 'mtext', 'mdist', 'minimap', 'speedo', 'speed', 'gear', 'nitrobar',
+      'wname', 'wammo', 'station', 'track', 'hint', 'crosshair', 'toast', 'dialogue', 'dwho', 'dtext',
+      'damage', 'collect', 'racebox', 'racename', 'racetime']) {
       this.el[id] = document.getElementById(id);
     }
     this.map = this.el.minimap.getContext('2d');
@@ -25,23 +27,27 @@ export class Hud {
     this.el.toast.textContent = text;
     this.toastUntil = this.G.time + secs;
   }
+
   showHint(text, secs = 5) {
     this.el.hint.textContent = text;
     this.el.hint.classList.remove('hidden');
     this.hintUntil = this.G.time + secs;
   }
+
   say(who, text, secs = 6) {
     this.el.dwho.textContent = who;
     this.el.dtext.textContent = text;
     this.el.dialogue.classList.remove('hidden');
     this.dialogueUntil = this.G.time + secs;
   }
+
   setMission(name, text) {
     if (!name) { this.el.objective.classList.add('hidden'); return; }
     this.el.objective.classList.remove('hidden');
     this.el.mname.textContent = name;
     this.el.mtext.textContent = text;
   }
+
   setDistance(d) { this.el.mdist.textContent = d; }
 
   update(dt) {
@@ -64,6 +70,8 @@ export class Hud {
     this.el.clock.textContent = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')} · VELAMAR BAY`;
     this.el.healthbarFill.style.width = Math.max(0, G.player.health) + '%';
     this.el.armorbarFill.style.width = Math.max(0, G.player.armor) + '%';
+    // Sunset tokens found.
+    this.el.collect.textContent = `◉ ${G.tokensFound.length}/${CFG.collectibles}`;
     // Weapon.
     const w = CFG.weapons[G.weapon];
     this.el.wname.textContent = w.name;
@@ -71,16 +79,33 @@ export class Hud {
     if (G.time >= this.toastUntil) this.el.toast.textContent = '';
     if (G.time >= this.dialogueUntil) this.el.dialogue.classList.add('hidden');
     if (G.time >= this.hintUntil) this.el.hint.classList.add('hidden');
-    // Speedometer (driving only).
+    // Race clock.
+    if (G.activities.race) {
+      const r = G.activities.race;
+      this.el.racebox.classList.remove('hidden');
+      this.el.racename.textContent = r.def.name.toUpperCase();
+      this.el.racetime.textContent = r.countdown > 0
+        ? 'READY…'
+        : `${r.t.toFixed(1)}s · ${r.idx + 1}/${r.def.points.length}`;
+    } else {
+      this.el.racebox.classList.add('hidden');
+    }
+    // Speedometer (driving only) plus nitro gauge.
     if (G.driving.active) {
       this.el.speedo.classList.remove('hidden');
       const kmh = Math.round(Math.abs(G.driving.car.speed) * 3.6);
       this.el.speed.innerHTML = `${kmh} <small>km/h</small>`;
       this.el.gear.textContent = G.driving.car.speed > 1 ? 'DRIVE' : G.driving.car.speed < -1 ? 'REVERSE' : 'PARK';
+      const nitro = G.driving.car.upgrades.nitro;
+      this.el.nitrobar.style.display = nitro ? 'block' : 'none';
+      if (nitro) {
+        this.el.nitrobar.firstElementChild.style.width = Math.round(G.driving.nitro) + '%';
+        this.el.nitrobar.firstElementChild.style.background = G.driving.nitroOn ? '#ff7a2b' : '#6ec6ff';
+      }
     } else {
       this.el.speedo.classList.add('hidden');
     }
-    this.el.crosshair.style.display = (!G.driving.active && G.weapon !== 'fists') ? 'block' : 'none';
+    this.el.crosshair.style.display = (!G.driving.active && G.weapon !== 'fists' && !G.weaponsSys.open) ? 'block' : 'none';
     // Radio.
     this.el.station.textContent = G.audio.stationName();
     this.el.track.textContent = '— ' + G.audio.trackName();
@@ -133,7 +158,27 @@ export class Hud {
       ctx.beginPath();
       ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y);
       ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+    // Activity markers: garage orange, gun shop purple, safehouse green,
+    // race starts white, tokens gold, next checkpoint big yellow.
+    for (const m of G.activities.poiMarkers()) {
+      const [x, y] = toMap(m.x, m.z);
+      if (m.kind === 'token') {
+        ctx.fillStyle = '#ffd94d';
+        ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2); ctx.fill();
+      } else if (m.kind === 'checkpoint') {
+        ctx.fillStyle = '#ffd94d';
+        ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5; ctx.stroke();
+      } else {
+        const colors = { garage: '#ffb84d', gunshop: '#b06eff', safehouse: '#7dff9a', race: '#ffffff' };
+        ctx.fillStyle = colors[m.kind] || '#fff';
+        ctx.fillRect(x - 3, y - 3, 6, 6);
+        ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.strokeRect(x - 3, y - 3, 6, 6);
+      }
     }
     // Traffic (white dots) and police (flashing blue/red).
     ctx.fillStyle = '#ffffff';
@@ -159,7 +204,8 @@ export class Hud {
     ctx.translate(px, py);
     ctx.rotate(heading);
     ctx.fillStyle = '#7dff9a';
-    ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(0, -8); ctx.lineTo(5.5, 6); ctx.lineTo(0, 3); ctx.lineTo(-5.5, 6);
     ctx.closePath(); ctx.fill(); ctx.stroke();

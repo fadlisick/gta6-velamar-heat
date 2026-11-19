@@ -1,6 +1,8 @@
-// Cars: low-poly box-built models in several body styles, plus the traffic
-// system — cars that cruise the avenues, slow for the car ahead, and turn at
-// intersections. Police cars are built here too (police.js drives them).
+// Cars: low-poly box-built models in six body styles, plus traffic — cars
+// that cruise the avenues, slow for the car ahead and turn at intersections.
+// Police cars are built here too; police.js drives them. A car can carry
+// garage upgrades: engine levels raise its top speed, armor raises its
+// health, tires sharpen it, nitro unlocks the boost.
 import * as THREE from 'three';
 import { CFG, PALETTE, roadCenters } from './config.js';
 import { makeRng, pick, range, clamp, angleLerp } from './random.js';
@@ -12,7 +14,10 @@ export function makeCarMesh(model, color, police = false) {
   const bodyMat = new THREE.MeshLambertMaterial({ color: police ? 0xf2f2f2 : color });
   const darkMat = new THREE.MeshLambertMaterial({ color: 0x1a1a22 });
   const glassMat = new THREE.MeshLambertMaterial({ color: 0x9fd4e8 });
-  const dims = { sedan: [4.4, 1.1, 1.9], coupe: [4.1, 0.95, 1.85], taxi: [4.4, 1.1, 1.9], van: [4.8, 1.9, 2.0], pickup: [4.9, 1.2, 2.0], sport: [4.3, 0.85, 1.95] }[model] || [4.4, 1.1, 1.9];
+  const dims = {
+    sedan: [4.4, 1.1, 1.9], coupe: [4.1, 0.95, 1.85], taxi: [4.4, 1.1, 1.9],
+    van: [4.8, 1.9, 2.0], pickup: [4.9, 1.2, 2.0], sport: [4.3, 0.85, 1.95],
+  }[model] || [4.4, 1.1, 1.9];
   const [L, H, W] = dims;
   const body = new THREE.Mesh(new THREE.BoxGeometry(L, H, W), bodyMat);
   body.position.y = 0.75;
@@ -39,18 +44,21 @@ export function makeCarMesh(model, color, police = false) {
     w.position.set(wx, 0.36, wz);
     g.add(w);
   }
-  // Headlights + taillights.
+  // Headlights and taillights.
   const hl = new THREE.MeshBasicMaterial({ color: 0xfff6c8 });
   const tl = new THREE.MeshBasicMaterial({ color: 0xff2a2a });
   for (const wz of [-W / 2 + 0.3, W / 2 - 0.3]) {
     const h = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.22, 0.42), hl);
-    h.position.set(L / 2 + 0.02, 0.8, wz); g.add(h);
+    h.position.set(L / 2 + 0.02, 0.8, wz);
+    g.add(h);
     const t = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.22, 0.42), tl);
-    t.position.set(-L / 2 - 0.02, 0.8, wz); g.add(t);
+    t.position.set(-L / 2 - 0.02, 0.8, wz);
+    g.add(t);
   }
   if (police) {
     const stripe = new THREE.Mesh(new THREE.BoxGeometry(L * 0.98, 0.3, W + 0.02), new THREE.MeshLambertMaterial({ color: 0x1a2a6e }));
-    stripe.position.y = 0.75; g.add(stripe);
+    stripe.position.y = 0.75;
+    g.add(stripe);
     const bar = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.22, 1.1), new THREE.MeshBasicMaterial({ color: 0xff2a2a }));
     bar.position.set(0, 0.75 + H / 2 + cabinH + 0.02, 0);
     g.add(bar);
@@ -75,15 +83,38 @@ export class Car {
     this.heading = heading;
     this.speed = 0;
     this.steer = 0;
-    this.maxSpeed = opts.maxSpeed ?? (model === 'sport' ? CFG.carMaxSpeed : CFG.carMaxSpeed * range(Math.random, 0.55, 0.8));
+    this.baseMaxSpeed = opts.maxSpeed ?? (model === 'sport' ? CFG.carMaxSpeed : CFG.carMaxSpeed * range(Math.random, 0.55, 0.8));
+    this.maxSpeed = this.baseMaxSpeed;
+    this.maxHealth = 100;
     this.health = 100;
+    this.upgrades = { engine: 0, armor: 0, tires: 0, nitro: false, ...(opts.upgrades || {}) };
+    this.applyUpgrades();
     this.parked = !!opts.parked;
     this.traffic = !!opts.traffic;
     this.driver = opts.driver ?? null; // 'player' | 'traffic' | 'police' | null
     this.dead = false;
   }
+
   get x() { return this.pos.x; }
   get z() { return this.pos.z; }
+
+  // Garage upgrades reshape the car: engine adds top speed, armor adds
+  // health, tires sharpen the steering (read by driving.js).
+  applyUpgrades() {
+    this.maxSpeed = this.baseMaxSpeed * (1 + 0.12 * this.upgrades.engine);
+    this.maxHealth = 100 + 50 * this.upgrades.armor;
+    this.health = Math.min(this.maxHealth, this.health + 50 * this.upgrades.armor);
+  }
+
+  damage(amount) {
+    this.health -= amount;
+    if (this.health <= 0) {
+      this.health = 0;
+      this.dead = true;
+    }
+    return this.dead;
+  }
+
   dispose() {
     this.scene.remove(this.mesh);
     this.dead = true;
@@ -140,7 +171,7 @@ export class Traffic {
       for (const o of this.cars) {
         if (o === car || o.dead || o.axis !== car.axis || o.road !== car.road || o.dir !== car.dir) continue;
         const ahead = car.axis === 'x' ? (o.x - car.x) * car.dir : (o.z - car.z) * car.dir;
-        if (ahead > 0 && ahead < 11) { target = Math.min(target, Math.max(0, (ahead - 7) * 1.2)); }
+        if (ahead > 0 && ahead < 11) target = Math.min(target, Math.max(0, (ahead - 7) * 1.2));
       }
       if (playerCar && !playerCar.dead) {
         const ahead = car.axis === 'x' ? (playerCar.x - car.x) * car.dir : (playerCar.z - car.z) * car.dir;
@@ -180,19 +211,26 @@ export class Traffic {
   }
 
   nearestParked(x, z, maxD = 6) {
-    let best = null, bd = maxD * maxD;
+    let best = null;
+    let bd = maxD * maxD;
     for (const c of this.parked) {
       if (c.dead || c.driver) continue;
-      const dx = c.x - x, dz = c.z - z, d = dx * dx + dz * dz;
+      const dx = c.x - x;
+      const dz = c.z - z;
+      const d = dx * dx + dz * dz;
       if (d < bd) { bd = d; best = c; }
     }
     return best;
   }
+
   nearestTraffic(x, z, maxD = 7) {
-    let best = null, bd = maxD * maxD;
+    let best = null;
+    let bd = maxD * maxD;
     for (const c of this.cars) {
       if (c.dead) continue;
-      const dx = c.x - x, dz = c.z - z, d = dx * dx + dz * dz;
+      const dx = c.x - x;
+      const dz = c.z - z;
+      const d = dx * dx + dz * dz;
       if (d < bd) { bd = d; best = c; }
     }
     return best;

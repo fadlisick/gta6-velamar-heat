@@ -1,13 +1,15 @@
 // VELAMAR HEAT — Sunset Run. An open-world crime game in Velamar Bay:
 // a city on foot and by car, traffic and pedestrians, cars to steal, a
 // 5-star wanted level with police and a helicopter, 8 story missions,
-// combat, a HUD with a live minimap, a start screen and a save.
-// Static files only: three.js is vendored under game/vendor, every sound is
-// synthesized, nothing is fetched over the network.
+// combat with a weapon wheel, a garage to tune and store cars, street
+// races, hidden tokens, a safehouse and a gun shop, a HUD with a live
+// minimap, a start screen and a save. Static files only: three.js is
+// vendored under game/vendor, every sound is synthesized, nothing is
+// fetched over the network.
 import * as THREE from 'three';
 import { CFG } from './config.js';
 import { City } from './city.js';
-import { Traffic } from './vehicles.js';
+import { Traffic, Car } from './vehicles.js';
 import { Pedestrians } from './pedestrians.js';
 import { Player } from './player.js';
 import { Driving } from './driving.js';
@@ -18,6 +20,9 @@ import { Hud } from './hud.js';
 import { AudioSys } from './audio.js';
 import { Effects } from './effects.js';
 import { Input } from './input.js';
+import { Garage } from './garage.js';
+import { WeaponWheel } from './weapons.js';
+import { Activities } from './activities.js';
 import { loadSave, writeSave, saveLabel } from './save.js';
 import { stageShot } from './shots.js';
 
@@ -69,11 +74,18 @@ const G = {
   ammo: Infinity,
   reserve: 0,
   garage: [],
+  tokensFound: [],
+  raceBest: {},
   clockMin: CFG.startClockMin,
   damageFlash: 0,
   lastDamageAt: -99,
   seed: SEED,
+  menuOpen: null, // 'garage' | 'shop' | null
+  mouseX: 0,
+  mouseY: 0,
 };
+G.scene = scene;
+G.camera = camera;
 G.city = new City(scene, SEED);
 G.traffic = new Traffic(scene, G.city, SEED);
 G.peds = new Pedestrians(scene, G.city, SEED);
@@ -86,7 +98,10 @@ G.audio = new AudioSys();
 G.hud = new Hud(G);
 G.missions = new MissionManager(G);
 G.input = new Input(canvas);
-G.camera = camera;
+G.garageSys = new Garage(G);
+G.weaponsSys = new WeaponWheel(G);
+G.activities = new Activities(scene, G.city, G);
+G.activities.raceBest = G.raceBest;
 
 // Mission beacon: a floating golden diamond over the current objective.
 {
@@ -110,6 +125,39 @@ G.say = (who, text, secs) => G.hud.say(who, text, secs);
 G.toast = (text, secs) => G.hud.toast(text, secs);
 G.saveGame = () => { if (writeSave(G)) G.hud.showHint('Game saved'); };
 
+// Menus (garage / gun shop) freeze play while they are up.
+G.openMenu = (name) => {
+  G.menuOpen = name;
+  G.state = 'paused';
+  document.getElementById(name === 'garage' ? 'garageMenu' : 'shopMenu').classList.remove('hidden');
+  document.exitPointerLock?.();
+  // A menu covers the screen: clear the transient banners so they never
+  // print over it, and paint the HUD once (it stops updating while paused).
+  G.hud.el.dialogue.classList.add('hidden');
+  G.hud.el.hint.classList.add('hidden');
+  G.hud.el.toast.textContent = '';
+  G.hud.update(0);
+};
+G.closeMenu = () => {
+  if (!G.menuOpen) return;
+  document.getElementById('garageMenu').classList.add('hidden');
+  document.getElementById('shopMenu').classList.add('hidden');
+  G.menuOpen = null;
+  G.state = 'playing';
+  lockPointer();
+};
+
+function applyWeapon(name) {
+  if (!G.weapons.includes(name)) return;
+  G.weapon = name;
+  const w = CFG.weapons[name];
+  if (name === 'fists') { G.ammo = Infinity; G.reserve = 0; }
+  else if (name === 'pistol') { G.ammo = Math.min(w.ammo, 12); G.reserve = 72; }
+  else { G.ammo = w.ammo; G.reserve = w.reserve; }
+  G.audio.click();
+}
+G.applyWeapon = applyWeapon;
+
 G.enterCar = (car) => {
   G.driving.enter(car);
   G.player.mesh.visible = false;
@@ -123,7 +171,7 @@ G.enterCar = (car) => {
     G.toast('CARJACKED — the cops saw that');
     G.peds.scare(car.x, car.z, 18);
   }
-  G.hud.showHint(car.police ? 'You stole a police car. Bold.' : `${car.model.toUpperCase()} — yours now. W/S drive, Space handbrake, E to get out`);
+  G.hud.showHint(car.police ? 'You stole a police car. Bold.' : `${car.model.toUpperCase()} — yours now. W/S drive, Shift nitro, Space handbrake, E to get out`);
 };
 
 G.exitCar = () => {
@@ -136,16 +184,6 @@ G.exitCar = () => {
   G.player.mesh.position.copy(G.player.pos);
 };
 
-function applyWeapon(name) {
-  if (!G.weapons.includes(name)) return;
-  G.weapon = name;
-  const w = CFG.weapons[name];
-  if (name === 'fists') { G.ammo = Infinity; G.reserve = 0; }
-  else if (name === 'pistol') { G.ammo = Math.min(w.ammo, 12); G.reserve = 72; }
-  else { G.ammo = w.ammo; G.reserve = w.reserve; }
-  G.audio.click();
-}
-
 G.startGame = (fromSave) => {
   G.audio.ensure();
   if (fromSave) {
@@ -155,6 +193,14 @@ G.startGame = (fromSave) => {
       G.respect = s.respect ?? 0;
       G.missionsDone = s.missionsDone ?? [];
       G.weapons = s.weapons?.length ? s.weapons : ['fists', 'pistol'];
+      G.garage = s.garage ?? [];
+      G.tokensFound = s.tokens ?? [];
+      G.raceBest = s.raceBest ?? {};
+      G.activities.raceBest = G.raceBest;
+      for (const i of G.tokensFound) {
+        const t = G.activities.tokens[i];
+        if (t) { t.taken = true; t.mesh.visible = false; }
+      }
       G.clockMin = s.clockMin ?? CFG.startClockMin;
       if (s.player) G.player.pos.set(s.player.x, 0, s.player.z);
       applyWeapon('pistol');
@@ -256,6 +302,21 @@ document.getElementById('btnEndMenu').addEventListener('click', () => {
   G.police.clearHeat();
 });
 
+// E / Escape close an open shop or garage menu (the frame loop is paused
+// while a menu is up, so this listener is the only way out by keyboard).
+window.addEventListener('keydown', (e) => {
+  if (!G.menuOpen) return;
+  if (e.code === 'KeyE' || e.code === 'Escape') {
+    e.preventDefault();
+    G.closeMenu();
+  }
+});
+// Mouse position for the weapon wheel (pointer lock is off while it is open).
+window.addEventListener('mousemove', (e) => {
+  G.mouseX = e.clientX;
+  G.mouseY = e.clientY;
+});
+
 // Mission ledger (imported lazily to keep the menu code small).
 import('./missions.js').then(({ MISSIONS }) => {
   const render = () => {
@@ -293,7 +354,7 @@ G.input.onPause = () => {
     G.state = 'paused';
     document.exitPointerLock?.();
     document.getElementById('pausemenu').classList.remove('hidden');
-  } else if (G.state === 'paused') {
+  } else if (G.state === 'paused' && !G.menuOpen) {
     document.getElementById('pausemenu').classList.add('hidden');
     G.state = 'playing';
     lockPointer();
@@ -336,37 +397,73 @@ function frame(now) {
   G.time += dt;
   G.clockMin = (G.clockMin + dt * CFG.clockRate) % (24 * 60);
 
-  // Weapon switching / reload / radio.
-  if (input.hit('Digit1')) applyWeapon('fists');
-  if (input.hit('Digit2')) applyWeapon('pistol');
-  if (input.hit('Digit3')) applyWeapon('smg');
+  // Weapon wheel: hold Q, aim with the mouse or tap 1–5, release to draw.
+  if (input.down('KeyQ')) {
+    if (!G.weaponsSys.open) {
+      document.exitPointerLock?.();
+      G.weaponsSys.openWheel();
+    }
+    G.weaponsSys.selectByMouse(G.mouseX, G.mouseY);
+    for (let i = 0; i < 5; i++) {
+      if (input.hit('Digit' + (i + 1))) G.weaponsSys.selectSlot(i);
+    }
+  } else if (G.weaponsSys.open && !G.pinWheel) {
+    G.weaponsSys.closeWheel(true);
+    lockPointer();
+  } else {
+    // Quick weapon keys when the wheel is closed.
+    for (let i = 0; i < 5; i++) {
+      if (input.hit('Digit' + (i + 1))) applyWeapon(CFG.weaponOrder[i]);
+    }
+  }
   if (input.hit('KeyR')) G.combat.startReload(G);
   if (input.hit('KeyM')) { G.audio.ensure(); G.audio.nextStation(); G.hud.showHint('♪ ' + G.audio.stationName()); }
   if (input.hit('KeyF')) writeSave(G) && G.hud.showHint('Progress saved');
 
-  // Enter / exit cars.
+  // E does the nearest sensible thing: garage, gun shop, race start, car.
   if (input.hit('KeyE')) {
-    if (G.driving.active) G.exitCar();
-    else {
+    if (G.menuOpen) {
+      G.closeMenu();
+    } else if (G.garageSys.nearPad()) {
+      G.garageSys.open();
+    } else if (!G.driving.active && G.activities.nearGunshop()) {
+      G.activities.openShop();
+    } else if (G.driving.active && G.activities.nearestRaceStart() >= 0 && !G.activities.race) {
+      G.activities.startRace(G.activities.nearestRaceStart());
+    } else if (G.driving.active) {
+      G.exitCar();
+    } else {
       const parked = G.traffic.nearestParked(G.player.x, G.player.z, 6);
       const moving = parked || G.traffic.nearestTraffic(G.player.x, G.player.z, 6);
       if (moving) G.enterCar(moving);
     }
   }
 
-  // Shooting / punching.
-  if (G.weapon === 'fists') {
-    if (input.mouseClicked || input.down('Mouse0')) G.combat.punch(G);
-  } else if (CFG.weapons[G.weapon].auto ? input.mouseDown : input.mouseClicked) {
-    G.combat.shoot(G, camera);
+  // Shooting / punching (never while the wheel is open).
+  if (!G.weaponsSys.open) {
+    if (G.weapon === 'fists') {
+      if (input.mouseClicked || input.down('Mouse0')) G.combat.punch(G);
+    } else if (CFG.weapons[G.weapon].auto ? input.mouseDown : input.mouseClicked) {
+      G.combat.shoot(G, camera);
+    }
   }
 
-  // Movement.
+  // Movement. A race countdown freezes the car on the line.
+  const raceFrozen = G.activities.race && G.activities.race.countdown > 0;
   let speedKmh = 0;
   if (G.driving.active) {
-    speedKmh = G.driving.update(dt, input, G.time);
+    if (!raceFrozen) speedKmh = G.driving.update(dt, input, G.time);
     G.driving.cameraTarget(camera, dt);
     if (Math.abs(G.driving.car.speed) > 20) G.police.addHeat(CFG.heatPerCrime.speeding * dt * 10);
+    if (G.driving.nitroOn) G.effects.nitroFlame(G.driving.car.x, G.driving.car.z, G.driving.car.heading);
+    // A wrecked ride explodes out from under the player.
+    if (G.driving.car.health <= 0 && !G.driving.car.dead) {
+      G.driving.car.dead = true;
+      G.effects.explosion(G.driving.car.x, G.driving.car.z);
+      G.audio.crash();
+      G.toast('YOUR RIDE IS WRECKED');
+      G.exitCar();
+    }
   } else {
     G.player.update(dt, input, false);
     G.player.cameraTarget(camera, dt);
@@ -380,6 +477,7 @@ function frame(now) {
   G.police.update(dt, G, G.time);
   G.combat.update(dt, G);
   G.missions.update(dt);
+  G.activities.update(dt);
   G.effects.update(dt);
   G.audio.updateEngine(speedKmh, G.police.stars, dt);
   G.hud.update(dt);
@@ -405,5 +503,5 @@ if (shot) {
 
 // Make the game debuggable from the console and from automated play-tests.
 window.__VELAMAR__ = G;
-console.log('%cVELAMAR HEAT%c loaded — W/S drive · E enter car · 8 jobs · 5-star police',
+console.log('%cVELAMAR HEAT%c loaded — W/S drive · E enter car · Q weapon wheel · 8 jobs · 5-star police',
   'background:#ff7a3d;color:#fff;padding:2px 6px;border-radius:3px', '');

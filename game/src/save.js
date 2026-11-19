@@ -1,5 +1,6 @@
 // Save / load through localStorage. One small JSON blob: cash, respect,
-// missions finished, owned weapons, garage cars and the last position.
+// missions finished, owned weapons, garage cars with their upgrades, the
+// sunset tokens found, race best times and the last position.
 const KEY = 'velamar-heat-save-v1';
 
 export function loadSave() {
@@ -21,7 +22,13 @@ export function writeSave(state) {
       respect: Math.round(state.respect),
       missionsDone: [...state.missionsDone],
       weapons: [...state.weapons],
-      garage: state.garage.map((c) => ({ color: c.color, model: c.model })),
+      garage: (state.garage || []).map((c) => ({
+        color: c.color,
+        model: c.model,
+        upgrades: { ...(c.upgrades || { engine: 0, armor: 0, tires: 0, nitro: false }) },
+      })),
+      tokens: [...(state.tokensFound || [])],
+      raceBest: { ...(state.raceBest || {}) },
       player: { x: state.player.pos.x, z: state.player.pos.z },
       clockMin: state.clockMin,
       savedAt: Date.now(),
